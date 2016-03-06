@@ -1,0 +1,21 @@
+# YouTubePlaylist
+Feed list of songs into playlists on YouTube!
+
+If you have a specific list of songs that you would like to add to one or more YouTube playlists, then this script can search for them and add them to playlists on your YouTube channel.
+
+This project assumes that you have a Google Developers account, and a project that has access to the YouTube Data API. All restrictions apply.
+
+This work is still in beta testing. Under version 1, I searched for 1,161 songs, the vast majority of which were hard rock and heavy metal (with a few exceptions of rap/hip-hop, funk, disco, and other miscellaneous genres!). 
+- 1,017 (87.7%) were correctly discovered and added to my playlists.
+- 87 (7.5%) were not found
+  - 17 of which due to an ampersand (&) that appeared in place of the word "AND" in the song title
+  - 4 of which had a non-ASCII character in the song title.
+- 57 (4.8%) incorrect videos were added
+  - 38 of which were live videos of artist performances
+  - 10 of which were covers (vocal/guitar/drum/bass, etc.)
+  - 5 of which were incorrect songs;
+  - 4 of which were other versions of those songs (remixes/acoustic/unplugged, etc.)
+
+For version 2, I will work to ensure that as many covers and live versions are ignored from consideration, as well as to allow for matching on either an ampersand or its equivalent "AND".
+
+There are also future plans to have a larger training corpus so that songs of other genres are more represented and can be added to playlists. 
