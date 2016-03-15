@@ -57,6 +57,8 @@ def search_videos(youtube,keyword,artist, song,maxResults=5):
     song = song.lower()
     artist_sub = re.sub("[^\w\s]","",artist)
     song_sub = re.sub("[^\w\s]","",song)
+    artist_and = re.sub("&","and",artist)
+    song_and = re.sub("&","and",song)
     # Check for matches with punctuation/symbols and without
 
     response = youtube.search().list(q=keyword,
@@ -87,31 +89,34 @@ def search_videos(youtube,keyword,artist, song,maxResults=5):
             flags=re.IGNORECASE)
             minute_search = re.search("pt([0-9]{1,}h)?([0-9]{1,2})m([0-9]{1,2})s",
             length,flags=re.IGNORECASE)
-            if "rehearsal" not in title and "h" not in length and 
-            minute_search is not None:
+            if ("rehearsal" not in title and "h" not in length and 
+            minute_search is not None):
             # If the song is less than an hour and is not a rehearsal
                 if int(minute_search.group(2)) <= 20:
                 # If the song is less than 20 minutes
-                    if (artist in description or artist_sub in description) and
-                    (song in title or song_sub in title) and 
-                    "provided to youtube" in description:
+                    if ((artist in description or artist_sub in description or 
+                        artist_and in description) and
+                    (song in title or song_sub in title or song_and in title) and 
+                    "provided to youtube" in description):
                     # If song comes from an auto-generated channel by YouTube
                         videos.append({
                             'youtube_id': youtube_id,
                             'title' : title,
                             'priority_flag' : 1
                         })
-                    elif user_search is not None or user in [artist,artist_sub]:
+                    elif user_search is not None or user in [artist,artist_sub,artist_and]:
                     # If the song comes from an official channel by the band/label
-                        if (artist in title and song in title) or 
-                        (artist_sub in title and song_sub in title):
+                        if ((artist in title and song in title) or 
+                        (artist_sub in title and song_sub in title) or
+                        (artist_and in title and song_and in title)):
                             videos.append({
                                 'youtube_id': youtube_id,
                                 'title' : title,
                                 'priority_flag' : 2
                             })
-                    elif (artist in title and song in title) or 
-                    (artist_sub in title and song_sub in title):
+                    elif ((artist in title and song in title) or 
+                    (artist_sub in title and song_sub in title) or
+                    (artist_and in title and song_and in title)):
                     # If the song comes from an unofficial channel
                         videos.append({
                             'youtube_id': youtube_id,
@@ -179,7 +184,7 @@ if __name__ == '__main__':
           part="snippet,status",
           body=dict(
             snippet=dict(
-              title="Playlist %d" % i,
+              title="Playlist %d v2" % i,
               description="A music playlist created with the YouTube API v3"
             ),
             status=dict(
@@ -207,4 +212,3 @@ if __name__ == '__main__':
     MissedSongs = NewSongs[~NewSongs["ID"].isin(AddedSongs)]
     MissedSongs.to_csv(path_or_buf="MissedSongs_Final.csv",index=False)
 # TODO: Filter out live versions, guitar covers, drum covers, vocal covers, etc.
-# TODO: Replace ampersands with "AND"
