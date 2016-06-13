@@ -47,21 +47,56 @@ YOUTUBE_READ_WRITE_SCOPE = "https://www.googleapis.com/auth/youtube"
 YOUTUBE_API_SERVICE_NAME = "youtube"
 YOUTUBE_API_VERSION = "v3"
 
+def get_authenticated_service():
+    flow = flow_from_clientsecrets(CLIENT_SECRETS_FILE, scope=YOUTUBE_READ_WRITE_SCOPE,
+                                   message=MISSING_CLIENT_SECRETS_MESSAGE)
 
-def search_videos(youtube, keyword, artist, song, maxResults=5):
-    import re
-    artist = artist.lower()
-    song = song.lower()
-    artist_sub = re.sub("[^\w\s]", "", artist)
-    song_sub = re.sub("[^\w\s]", "", song)
-    artist_and = re.sub("&", "and", artist)
-    song_and = re.sub("&", "and", song)
-    # Check for matches with punctuation/symbols and without
+    storage = Storage("%s-oauth2.json" % sys.argv[0])
+    credentials = storage.get()
 
-    response = youtube.search().list(q=keyword,
+    if credentials is None or credentials.invalid:
+        flags = argparser.parse_args()
+        credentials = run_flow(flow, storage, flags)
+
+    return build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION,
+                 http=credentials.authorize(httplib2.Http()))
+
+def name_variations(name):
+    """Computes variations of string with punctuation/symbols and without
+    """
+    name = name.lower()
+    name_sub = re.sub("[^\w\s]", "", name)
+    name_and = re.sub("&", "and", name)
+    return [name, name_sub, name_and]
+
+def youtube_search(youtube, keyword, maxResults):
+    """Retrieve list of results for video search
+    """
+    return youtube.search().list(q=keyword,
                                      part="id,snippet",
                                      maxResults=maxResults
                                      ).execute().get("items", [])
+
+def retrieve_video_length(youtube, youtube_id):
+    """Retrieve duration info for specific video
+    """
+    video_response = youtube.videos().list(
+                     id = youtube_id,
+                     part = 'contentDetails'
+                     ).execute()
+
+    length = video_response.get("items", [])[0][
+                "contentDetails"]["duration"]
+    length = length.encode(encoding='UTF-8', errors='strict').lower()
+    return length
+
+def search_videos(youtube, keyword, artist, song, maxResults=5):
+    artist_variations = name_variations(artist)
+    song_variations = name_variations(song)
+
+    # Check for matches with punctuation/symbols and without
+
+    response = youtube_search(youtube, keyword, maxResults)
 
     videos = []
 
@@ -75,14 +110,7 @@ def search_videos(youtube, keyword, artist, song, maxResults=5):
                 encoding='UTF-8', errors='strict').lower()
             youtube_id = record["id"]["videoId"].encode(encoding='UTF-8',
                                                         errors='strict')
-            # Call videos.list method to retrieve location details for video.
-            video_response = youtube.videos().list(
-                id=youtube_id,
-                part='contentDetails'
-            ).execute()
-            length = video_response.get("items", [])[0][
-                "contentDetails"]["duration"]
-            length = length.encode(encoding='UTF-8', errors='strict').lower()
+            length = retrieve_video_length(youtube, youtube_id)
             user_search = re.search("band|official|VEVO|records", user,
                                     flags=re.IGNORECASE)
             minute_search = re.search("pt([0-9]{1,}h)?([0-9]{1,2})m([0-9]{1,2})s",
@@ -92,9 +120,8 @@ def search_videos(youtube, keyword, artist, song, maxResults=5):
                 # If the song is less than an hour and is not a rehearsal
                 if int(minute_search.group(2)) <= 20:
                     # If the song is less than 20 minutes
-                    if ((artist in description or artist_sub in description or
-                         artist_and in description) and
-                            (song in title or song_sub in title or song_and in title) and
+                    if (any(x in description for x in artist_variations) and
+                        any(x in title for x in song_variations) and
                             "provided to youtube" in description):
                         # If song comes from an auto-generated channel by
                         # YouTube
@@ -103,20 +130,18 @@ def search_videos(youtube, keyword, artist, song, maxResults=5):
                             'title': title,
                             'priority_flag': 1
                         })
-                    elif user_search is not None or user in [artist, artist_sub, artist_and]:
+                    elif user_search is not None or user in artist_variations:
                         # If the song comes from an official channel by the
                         # band/label
-                        if ((artist in title and song in title) or
-                                (artist_sub in title and song_sub in title) or
-                                (artist_and in title and song_and in title)):
+                        if (any(x in title for x in artist_variations) and
+                            any(x in title for x in song_variations)):
                             videos.append({
                                 'youtube_id': youtube_id,
                                 'title': title,
                                 'priority_flag': 2
                             })
-                    elif ((artist in title and song in title) or
-                          (artist_sub in title and song_sub in title) or
-                          (artist_and in title and song_and in title)):
+                    elif (any(x in title for x in artist_variations) and
+                          any(x in title for x in song_variations)):
                         # If the song comes from an unofficial channel
                         videos.append({
                             'youtube_id': youtube_id,
@@ -148,27 +173,11 @@ def add_video_to_playlist(youtube, videoID, playlistID):
                     'kind': 'youtube#video',
                     'videoId': videoID
                 }
-                #'position': 0
             }
         }
     ).execute()
 
-
-def get_authenticated_service():
-    flow = flow_from_clientsecrets(CLIENT_SECRETS_FILE, scope=YOUTUBE_READ_WRITE_SCOPE,
-                                   message=MISSING_CLIENT_SECRETS_MESSAGE)
-
-    storage = Storage("%s-oauth2.json" % sys.argv[0])
-    credentials = storage.get()
-
-    if credentials is None or credentials.invalid:
-        flags = argparser.parse_args()
-        credentials = run_flow(flow, storage, flags)
-
-    return build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION,
-                 http=credentials.authorize(httplib2.Http()))
-
-if __name__ == '__main__':
+def main():
     NewSongs = pd.read_csv(r'SongsToAdd.csv')
     TotalSongs = np.shape(NewSongs)[0]
     MaxVideos = 200
@@ -178,7 +187,7 @@ if __name__ == '__main__':
     # List that contains the songs that were successfully added to a playlist
 
     youtube = get_authenticated_service()
-    inner_loop_index = 0
+    song_index = 0
     for i in range(TotalPlaylists):
         # This code creates a new, public playlist in the authorized user's
         # channel.
@@ -186,7 +195,7 @@ if __name__ == '__main__':
             part="snippet,status",
             body=dict(
                 snippet=dict(
-                    title="Playlist %d v2" % i,
+                    title="Playlist %d v3" % i,
                     description="A music playlist created with the YouTube API v3"
                 ),
                 status=dict(
@@ -197,23 +206,26 @@ if __name__ == '__main__':
         playlist_id = playlists_insert_response["id"]
         for j in range(0, MaxVideos):
             try:
-                if j + inner_loop_index == TotalSongs:
+                if j + song_index == TotalSongs:
                     break
                 artist = NewSongs.loc[
-                    j + inner_loop_index, ["Artist"]].values[0]
-                song = NewSongs.loc[j + inner_loop_index, ["Song"]].values[0]
+                    j + song_index, ["Artist"]].values[0]
+                song = NewSongs.loc[j + song_index, ["Song"]].values[0]
                 results = search_videos(
                     youtube, artist + ' ' + song, artist, song, maxResults=5)
                 if results != "No results found":
                     add_video_to_playlist(
                         youtube, results['youtube_id'], playlist_id)
                     AddedSongs.append(
-                        NewSongs.loc[j + inner_loop_index, ["ID"]].values[0])
+                        NewSongs.loc[j + song_index, ["ID"]].values[0])
             except HttpError, e:
                 MissedSongs = NewSongs[~NewSongs["ID"].isin(AddedSongs)]
                 MissedSongs.to_csv(path_or_buf="MissedSongs_%d_%d.csv" %
-                                   (i, inner_loop_index), index=False)
+                                   (i, song_index), index=False)
                 print "An HTTP error %d occurred:\n%s" % (e.resp.status, e.content)
-        inner_loop_index += MaxVideos
+        song_index += MaxVideos
     MissedSongs = NewSongs[~NewSongs["ID"].isin(AddedSongs)]
     MissedSongs.to_csv(path_or_buf="MissedSongs_Final.csv", index=False)
+
+if __name__ == '__main__':
+    main()
