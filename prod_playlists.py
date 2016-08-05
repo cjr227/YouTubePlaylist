@@ -77,6 +77,45 @@ def youtube_search(youtube, keyword, maxResults):
                                      maxResults=maxResults
                                      ).execute().get("items", [])
 
+def is_video(search_result):
+    """Check if YouTube search result is a video
+    """
+    if search_result["id"]["kind"] == "youtube#video":
+        return True
+    else:
+        return False
+
+def retrieve_video_title(search_result):
+    """Store title of YouTube video
+    """
+    title = search_result["snippet"]["title"]
+    title = title.encode(encoding='UTF-8',errors='strict')
+    title = title.lower()
+    return title
+
+def retrieve_video_user(search_result):
+    """Store user of YouTube video
+    """
+    user = search_result["snippet"]["channelTitle"]
+    user = user.encode(encoding='UTF-8',errors='strict')
+    user = user.lower()
+    return user
+
+def retrieve_video_description(search_result):
+    """Store description of YouTube video
+    """
+    description = search_result["snippet"]["description"]
+    description = description.encode(encoding='UTF-8',errors='strict')
+    description = description.lower()
+    return description
+
+def retrieve_video_id(search_result):
+    """Store ID of YouTube video
+    """
+    youtube_id = search_result["id"]["videoId"]
+    youtube_id = youtube_id.encode(encoding='UTF-8',errors='strict')
+    return youtube_id
+
 def retrieve_video_length(youtube, youtube_id):
     """Retrieve duration info for specific video
     """
@@ -90,35 +129,70 @@ def retrieve_video_length(youtube, youtube_id):
     length = length.encode(encoding='UTF-8', errors='strict').lower()
     return length
 
-def search_videos(youtube, keyword, artist, song, maxResults=5):
+def parse_video_length(length):
+    """Retrieve number of hours, minutes, and seconds for specific video
+    """
+    length_search = re.search("pt([0-9]{1,}h)?([0-9]{1,2})m([0-9]{1,2})s",
+                                length, flags=re.IGNORECASE)
+    return length_search [length_search.group(1), length_search.group(2), length_search.group(3)]
+
+def create_irrv_token_list():
+    """Create list of regex for irrelevant videos
+    """
+    irrv_list = []
+    irrv_list[0] = "rehearsal"
+    irrv_list[1] = "behind the scenes"
+    irrv_list[2] = "(guitar|drum|bass) (cover|playthrough)"
+    irrv_list[3] = "\((live|cover)\)$"
+    return irrv_list
+
+def is_irrelevant(title, irrv_list):
+    """Check if video title contains terms that render video irrelevant
+    """
+    for token in irrv_list:
+        title_search = re.search(token, title, flags=re.IGNORECASE)
+        if title_search is not None:
+            return True
+        else:
+            return False
+
+def official_channel_search(user):
+    """Search channel title for indicators of being an official channel
+    """
+    user_search = re.search("band|official|VEVO|records", user,
+                            flags=re.IGNORECASE)
+    return user_search
+
+def is_official_channel(user_search, artist_variations):
+    """Check if a video comes from an official channel by the artist/label
+    """
+    if user_search is not None or user in artist_variations:
+        return True
+    else:
+        return False
+
+def search_videos(youtube, keyword, artist, song, maxResults = 5):
     artist_variations = name_variations(artist)
     song_variations = name_variations(song)
-
-    # Check for matches with punctuation/symbols and without
-
     response = youtube_search(youtube, keyword, maxResults)
-
     videos = []
 
     for record in response:
-        if record["id"]["kind"] == "youtube#video":
-            title = record["snippet"]["title"].encode(encoding='UTF-8',
-                                                      errors='strict').lower()
-            user = record["snippet"]["channelTitle"].encode(encoding='UTF-8',
-                                                            errors='strict').lower()
-            description = record["snippet"]["description"].encode(
-                encoding='UTF-8', errors='strict').lower()
-            youtube_id = record["id"]["videoId"].encode(encoding='UTF-8',
-                                                        errors='strict')
+        if is_video(record):
+            title = retrieve_video_title(record)
+            user = retrieve_video_user(record)
+            description = retrieve_video_description(record)
+            youtube_id = retrieve_video_id(record)
             length = retrieve_video_length(youtube, youtube_id)
-            user_search = re.search("band|official|VEVO|records", user,
-                                    flags=re.IGNORECASE)
-            minute_search = re.search("pt([0-9]{1,}h)?([0-9]{1,2})m([0-9]{1,2})s",
-                                      length, flags=re.IGNORECASE)
+            user_search = official_channel_search(user)
+            length_search = parse_video_length(length)
             if ("rehearsal" not in title and "h" not in length and
                     minute_search is not None):
                 # If the song is less than an hour and is not a rehearsal
-                if int(minute_search.group(2)) <= 20:
+                hours,minutes,seconds = [length_search.group(1),
+                                         int(length_search.group(2)),
+                                         int(length_search.group(3))]
+                if minutes <= 20:
                     # If the song is less than 20 minutes
                     if (any(x in description for x in artist_variations) and
                         any(x in title for x in song_variations) and
@@ -130,7 +204,7 @@ def search_videos(youtube, keyword, artist, song, maxResults=5):
                             'title': title,
                             'priority_flag': 1
                         })
-                    elif user_search is not None or user in artist_variations:
+                    elif is_official_channel(user_search, artist_variations):
                         # If the song comes from an official channel by the
                         # band/label
                         if (any(x in title for x in artist_variations) and
@@ -162,8 +236,26 @@ def search_videos(youtube, keyword, artist, song, maxResults=5):
             except ValueError:
                 return "No results found"
 
+def create_playlist(youtube, val):
+    """Creates a new, public playlist in the authorized user's channel
+    """
+    playlists_insert_request = youtube.playlists().insert(
+        part="snippet,status",
+        body=dict(
+            snippet=dict(
+                title="Playlist %d v3" % val,
+                description="A music playlist created with the YouTube API v3"
+            ),
+            status=dict(
+                privacyStatus="public"
+            )
+        )
+    ).execute()
+    return playlists_insert_request
 
 def add_video_to_playlist(youtube, videoID, playlistID):
+    """Adds specified video to given playlist
+    """
     add_video_request = youtube.playlistItems().insert(
         part="snippet",
         body={
@@ -177,6 +269,8 @@ def add_video_to_playlist(youtube, videoID, playlistID):
         }
     ).execute()
 
+
+
 def main():
     NewSongs = pd.read_csv(r'SongsToAdd.csv')
     TotalSongs = np.shape(NewSongs)[0]
@@ -189,20 +283,7 @@ def main():
     youtube = get_authenticated_service()
     song_index = 0
     for i in range(TotalPlaylists):
-        # This code creates a new, public playlist in the authorized user's
-        # channel.
-        playlists_insert_response = youtube.playlists().insert(
-            part="snippet,status",
-            body=dict(
-                snippet=dict(
-                    title="Playlist %d v3" % i,
-                    description="A music playlist created with the YouTube API v3"
-                ),
-                status=dict(
-                    privacyStatus="public"
-                )
-            )
-        ).execute()
+        playlists_insert_response = create_playlist(youtube, i)
         playlist_id = playlists_insert_response["id"]
         for j in range(0, MaxVideos):
             try:
