@@ -132,9 +132,12 @@ def retrieve_video_length(youtube, youtube_id):
 def parse_video_length(length):
     """Retrieve number of hours, minutes, and seconds for specific video
     """
-    length_search = re.search("pt([0-9]{1,}h)?([0-9]{1,2})m([0-9]{1,2})s",
+    len_search = re.search("pt([0-9]{1,}h)?([0-9]{1,2})m([0-9]{1,2})s",
                                 length, flags=re.IGNORECASE)
-    return length_search [length_search.group(1), length_search.group(2), length_search.group(3)]
+    if len_search is not None:
+        return [len_search.group(1), len_search.group(2), len_search.group(3)]
+    else:
+        return None
 
 def create_irrv_token_list():
     """Create list of regex for irrelevant videos
@@ -154,7 +157,8 @@ def is_irrelevant(title, irrv_list):
         if title_search is not None:
             return True
         else:
-            return False
+            continue
+    return False
 
 def official_channel_search(user):
     """Search channel title for indicators of being an official channel
@@ -171,7 +175,24 @@ def is_official_channel(user_search, artist_variations):
     else:
         return False
 
-def search_videos(youtube, keyword, artist, song, maxResults = 5):
+def name_fuzzy_match(variations, search_text):
+    """Check if string variations of a name appear in search text
+    """
+    return any(x in search_text for x in variations)
+
+def is_auto_channel(artist_variations, song_variations, title, description):
+    """Check if video comes from auto-generated channel by YouTube
+    """
+    if name_fuzzy_match(artist_variations, description) and
+        name_fuzzy_match(song_variations, title) and
+        "provided to youtube" in description:
+        return True
+    else:
+        return False
+
+def search_videos(youtube, keyword, artist, song, maxResults = 5, irrv_list):
+    """Search for top relevant videos given keyword
+    """
     artist_variations = name_variations(artist)
     song_variations = name_variations(song)
     response = youtube_search(youtube, keyword, maxResults)
@@ -186,19 +207,18 @@ def search_videos(youtube, keyword, artist, song, maxResults = 5):
             length = retrieve_video_length(youtube, youtube_id)
             user_search = official_channel_search(user)
             length_search = parse_video_length(length)
-            if ("rehearsal" not in title and "h" not in length and
-                    minute_search is not None):
-                # If the song is less than an hour and is not a rehearsal
+            artist_title_match = name_fuzzy_match(artist_variations, title)
+            song_title_match = name_fuzzy_match(song_variations, title)
+            if (not is_irrelevant(title, irrv_list) and 
+                length_search is not None):
+                # If video does not contain terms irrelevant to search
                 hours,minutes,seconds = [length_search.group(1),
                                          int(length_search.group(2)),
                                          int(length_search.group(3))]
-                if minutes <= 20:
-                    # If the song is less than 20 minutes
-                    if (any(x in description for x in artist_variations) and
-                        any(x in title for x in song_variations) and
-                            "provided to youtube" in description):
-                        # If song comes from an auto-generated channel by
-                        # YouTube
+                if minutes <= 20 and hours is None:
+                    # If video is less than 20 minutes and is less than an hour
+                    if is_auto_channel(artist_variations, song_variations, 
+                                       title, description):
                         videos.append({
                             'youtube_id': youtube_id,
                             'title': title,
@@ -207,33 +227,32 @@ def search_videos(youtube, keyword, artist, song, maxResults = 5):
                     elif is_official_channel(user_search, artist_variations):
                         # If the song comes from an official channel by the
                         # band/label
-                        if (any(x in title for x in artist_variations) and
-                            any(x in title for x in song_variations)):
+                        if (artist_title_match and song_title_match):
                             videos.append({
                                 'youtube_id': youtube_id,
                                 'title': title,
                                 'priority_flag': 2
                             })
-                    elif (any(x in title for x in artist_variations) and
-                          any(x in title for x in song_variations)):
+                    elif (artist_title_match and song_title_match):
                         # If the song comes from an unofficial channel
                         videos.append({
                             'youtube_id': youtube_id,
                             'title': title,
                             'priority_flag': 3
                         })
-    try:
-        PriorityCheck = [d['priority_flag'] == 1 for d in videos]
-        return videos[PriorityCheck.index(True)]
-    except ValueError:
+    return videos
+
+def retrieve_top_video(videos):
+    """Returns most relevant video for given search term
+    """
+    for i in range(1, 4):
         try:
-            PriorityCheck = [d['priority_flag'] == 2 for d in videos]
+            PriorityCheck = [d['priority_flag'] == i for d in videos]
             return videos[PriorityCheck.index(True)]
         except ValueError:
-            try:
-                PriorityCheck = [d['priority_flag'] == 3 for d in videos]
-                return videos[PriorityCheck.index(True)]
-            except ValueError:
+            if i < 3:
+                continue
+            else:
                 return "No results found"
 
 def create_playlist(youtube, val):
@@ -282,6 +301,7 @@ def main():
 
     youtube = get_authenticated_service()
     song_index = 0
+    irrv_list = create_irrv_token_list()
     for i in range(TotalPlaylists):
         playlists_insert_response = create_playlist(youtube, i)
         playlist_id = playlists_insert_response["id"]
@@ -292,11 +312,13 @@ def main():
                 artist = NewSongs.loc[
                     j + song_index, ["Artist"]].values[0]
                 song = NewSongs.loc[j + song_index, ["Song"]].values[0]
-                results = search_videos(
-                    youtube, artist + ' ' + song, artist, song, maxResults=5)
-                if results != "No results found":
+                videos = search_videos(
+                    youtube, artist + ' ' + song, artist, song, maxResults=5,
+                    irrv_list)
+                top_vid = retrieve_top_video(videos)
+                if top_vid != "No results found":
                     add_video_to_playlist(
-                        youtube, results['youtube_id'], playlist_id)
+                        youtube, top_vid['youtube_id'], playlist_id)
                     AddedSongs.append(
                         NewSongs.loc[j + song_index, ["ID"]].values[0])
             except HttpError, e:
