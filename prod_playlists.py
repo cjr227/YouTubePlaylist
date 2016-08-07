@@ -190,11 +190,12 @@ def is_auto_channel(artist_variations, song_variations, title, description):
     else:
         return False
 
-def search_videos(youtube, keyword, artist, song, maxResults = 5, irrv_list):
+def search_videos(youtube, artist, song, maxResults = 5, irrv_list):
     """Search for top relevant videos given keyword
     """
     artist_variations = name_variations(artist)
     song_variations = name_variations(song)
+    keyword = artist + ' ' + song
     response = youtube_search(youtube, keyword, maxResults)
     videos = []
 
@@ -216,7 +217,7 @@ def search_videos(youtube, keyword, artist, song, maxResults = 5, irrv_list):
                                          int(length_search.group(2)),
                                          int(length_search.group(3))]
                 if minutes <= 20 and hours is None:
-                    # If video is less than 20 minutes and is less than an hour
+                    # If video is less than 20 minutes
                     if is_auto_channel(artist_variations, song_variations, 
                                        title, description):
                         videos.append({
@@ -313,8 +314,7 @@ def main():
                     j + song_index, ["Artist"]].values[0]
                 song = NewSongs.loc[j + song_index, ["Song"]].values[0]
                 videos = search_videos(
-                    youtube, artist + ' ' + song, artist, song, maxResults=5,
-                    irrv_list)
+                    youtube, artist, song, maxResults=5, irrv_list)
                 top_vid = retrieve_top_video(videos)
                 if top_vid != "No results found":
                     add_video_to_playlist(
