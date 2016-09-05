@@ -3,11 +3,11 @@
 import re
 import unicodedata
 import pandas as pd
-import numpy as np
 import math
 import httplib2
 import os
 import sys
+import argparse
 
 from apiclient.discovery import build
 from apiclient.errors import HttpError
@@ -309,16 +309,34 @@ def add_video_to_playlist(youtube, videoID, playlistID):
         }
     ).execute()
 
+def quota_estimate(TotalPlaylists, TotalSongs):
+    """Estimates current quota usage
+    """
+    playlist_create_cost = 50*TotalPlaylists
+    playlist_insert_cost = 50*TotalSongs
+    video_search_cost = 100*TotalSongs
+    video_info_cost = 3*TotalSongs
+    total_cost = (playlist_create_cost + playlist_insert_cost +
+    video_search_cost + video_info_cost)
+    return total_cost
 
 def main():
-    NewSongs = pd.read_csv(r'SongsToAdd.csv')
-    TotalSongs = np.shape(NewSongs)[0]
+    parser = argparse.ArgumentParser()
+    parser.add_argument('filename')
+    args = parser.parse_args()
+    NewSongs = pd.read_csv(args.filename)
+    TotalSongs = len(NewSongs)
     MaxVideos = 200
     # Maximum number of videos per playlist
     TotalPlaylists = int(math.ceil(1. * TotalSongs / MaxVideos))
     AddedSongs = []
-    # List that contains the songs that were successfully added to a playlist
-
+    # Contains songs that were successfully added to a playlist
+    est = quota_estimate(TotalPlaylists, TotalSongs)
+    if est >= 1000000:
+        print """WARNING: Your quota usage is estimated to exceed your daily limit.
+        Please proceed accordingly."""
+        sys.exit()
+    print """NOTE: Your estimated quota usage is %i units.""" % est
     youtube = get_authenticated_service()
     song_index = 0
     irrv_list = create_irrv_token_list()
