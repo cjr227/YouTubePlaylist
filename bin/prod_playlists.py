@@ -156,7 +156,7 @@ def create_irrv_token_list():
     irrv_list = []
     irrv_list.append("rehearsal")
     irrv_list.append("behind the scenes")
-    irrv_list.append("(guitar|drum|bass) (cover|playthrough)")
+    irrv_list.append("(guitar|drum|bass) (cover|playthrough|tab)")
     irrv_list.append("\((live|cover)\)$")
     return irrv_list
 
