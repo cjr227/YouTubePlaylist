@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 # Usage example:
-# python prod_playlists.py --filename='<file_name>'
+# python prod_playlists.py filename
 
 import re
 import unicodedata
@@ -329,7 +329,8 @@ def quota_estimate(TotalPlaylists, TotalSongs):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('filename')
+    parser.add_argument('filename', help = 'Filename of artists and songs',
+                        type=argparse.FileType('r'))
     args = parser.parse_args()
     NewSongs = pd.read_csv(args.filename)
     TotalSongs = len(NewSongs)
