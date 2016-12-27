@@ -1,5 +1,8 @@
 #!/usr/bin/python
 
+# Usage example:
+# python prod_playlists.py --filename='<file_name>'
+
 import re
 import unicodedata
 import pandas as pd
@@ -49,6 +52,8 @@ YOUTUBE_API_VERSION = "v3"
 
 
 def get_authenticated_service():
+    """Authorize the request and store authorization credentials
+    """
     flow = flow_from_clientsecrets(CLIENT_SECRETS_FILE, scope=YOUTUBE_READ_WRITE_SCOPE,
                                    message=MISSING_CLIENT_SECRETS_MESSAGE)
 
@@ -73,7 +78,7 @@ def name_variations(name):
 
 
 def youtube_search(youtube, keyword, maxResults):
-    """Retrieve list of results for video search
+    """Call the API to retrieve list of results for video search
     """
     return youtube.search().list(q=keyword,
                                  part="id,snippet",
@@ -126,7 +131,7 @@ def retrieve_video_id(search_result):
 
 
 def retrieve_video_length(youtube, youtube_id):
-    """Retrieve duration info for specific video
+    """Call the API to retrieve duration info for specific video
     """
     video_response = youtube.videos().list(
         id=youtube_id,
@@ -276,7 +281,7 @@ def retrieve_top_video(videos):
 
 
 def create_playlist(youtube, val):
-    """Creates a new, public playlist in the authorized user's channel
+    """Call the API to create a new playlist in the authorized user's channel
     """
     playlists_insert_request = youtube.playlists().insert(
         part="snippet,status",
@@ -294,7 +299,7 @@ def create_playlist(youtube, val):
 
 
 def add_video_to_playlist(youtube, videoID, playlistID):
-    """Adds specified video to given playlist
+    """Call the API to add specified video to given playlist
     """
     add_video_request = youtube.playlistItems().insert(
         part="snippet",
@@ -309,16 +314,18 @@ def add_video_to_playlist(youtube, videoID, playlistID):
         }
     ).execute()
 
+
 def quota_estimate(TotalPlaylists, TotalSongs):
     """Estimates current quota usage
     """
-    playlist_create_cost = 50*TotalPlaylists
-    playlist_insert_cost = 50*TotalSongs
-    video_search_cost = 100*TotalSongs
-    video_info_cost = 3*TotalSongs
+    playlist_create_cost = 50 * TotalPlaylists
+    playlist_insert_cost = 50 * TotalSongs
+    video_search_cost = 100 * TotalSongs
+    video_info_cost = 3 * TotalSongs
     total_cost = (playlist_create_cost + playlist_insert_cost +
-    video_search_cost + video_info_cost)
+                  video_search_cost + video_info_cost)
     return total_cost
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -347,8 +354,7 @@ def main():
             try:
                 if j + song_index == TotalSongs:
                     break
-                artist = NewSongs.loc[
-                    j + song_index, ["Artist"]].values[0]
+                artist = NewSongs.loc[j + song_index, ["Artist"]].values[0]
                 song = NewSongs.loc[j + song_index, ["Song"]].values[0]
                 videos = search_videos(
                     youtube, artist, song, maxResults=5, irrv_list=irrv_list)
