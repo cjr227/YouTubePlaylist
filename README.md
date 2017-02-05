@@ -5,6 +5,7 @@ If you have a specific list of songs that you would like to add to one or more Y
 
 This project assumes that you have a Google Developers account, and a project that has access to the YouTube Data API. All restrictions apply.
 
+Credit for inspiration goes to the [Python code samples for the YouTube Data API] (https://github.com/youtube/api-samples/tree/master/python).
 
 ## Setup
 
