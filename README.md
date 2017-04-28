@@ -5,7 +5,7 @@ If you have a specific list of songs that you would like to add to one or more Y
 
 This project assumes that you have a Google Developers account, and a project that has access to the YouTube Data API. All restrictions apply.
 
-Credit for inspiration goes to the [Python code samples for the YouTube Data API] (https://github.com/youtube/api-samples/tree/master/python).
+Credit for inspiration goes to the [Python code samples for the YouTube Data API](https://github.com/youtube/api-samples/tree/master/python).
 
 ## Setup
 
@@ -17,8 +17,8 @@ Credit for inspiration goes to the [Python code samples for the YouTube Data API
     | 2  | Sean Paul  | Like Glue             |
     | 3  | The O'Jays | For the Love of Money |
 
-2. On the Google Developers site, follow [these] (https://developers.google.com/youtube/v3/getting-started) instructions for setting up an account.
-3. Under the [Developers Console] (https://console.developers.google.com/), select your project and click "Credentials". 
+2. On the Google Developers site, follow [these](https://developers.google.com/youtube/v3/getting-started) instructions for setting up an account.
+3. Under the [Developers Console](https://console.developers.google.com/), select your project and click "Credentials". 
 4. Save your OAuth2 credentials as "client_secrets.json".
 5. Pull the latest copy of this repository.
 
