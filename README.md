@@ -3,7 +3,7 @@ Feed list of songs into playlists on YouTube!
 
 If you have a specific list of songs that you would like to add to one or more YouTube playlists, then this script can search for them and add them to playlists on your YouTube channel.
 
-This project assumes that you have a Google Developers account, and a project that has access to the YouTube Data API. All restrictions apply.
+This project assumes that you have a Google Developers account, and a project that has access to the YouTube Data API with OAuth 2.0 authorization. All restrictions apply.
 
 Credit for inspiration goes to the [Python code samples for the YouTube Data API](https://github.com/youtube/api-samples/tree/master/python).
 
