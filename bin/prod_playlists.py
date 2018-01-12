@@ -73,9 +73,12 @@ def name_variations(name):
     """
     name = name.lower()
     name_sub = re.sub("[^\w\s]", "", name)
+    name_sub = " ".join(name_sub.split())
     name_and = re.sub("&", "and", name)
     return [name, name_sub, name_and]
 
+assert name_variations("AC/DC") == ['ac/dc', 'acdc', 'ac/dc']
+assert name_variations("Coheed & Cambria") == ['coheed & cambria', 'coheed cambria', 'coheed and cambria']
 
 def youtube_search(youtube, keyword, maxResults):
     """Call the API to retrieve list of results for video search
