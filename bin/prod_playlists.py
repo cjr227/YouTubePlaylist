@@ -11,12 +11,11 @@ import httplib2
 import os
 import sys
 import argparse
-
-from apiclient.discovery import build
-from apiclient.errors import HttpError
-from oauth2client.client import flow_from_clientsecrets
-from oauth2client.file import Storage
-from oauth2client.tools import argparser, run_flow
+import google.oauth2.credentials
+import google_auth_oauthlib.flow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from google_auth_oauthlib.flow import InstalledAppFlow
 
 
 class YouTubeAuth:
@@ -28,52 +27,25 @@ class YouTubeAuth:
         def get_authenticated_service(self):
             """Authorize the request and store authorization credentials
             """
-            flow = flow_from_clientsecrets(self.CLIENT_SECRETS_FILE, 
-                                   scope=self.YOUTUBE_READ_WRITE_SCOPE,
-                                   message=self.MISSING_CLIENT_SECRETS_MESSAGE)
+            flow = InstalledAppFlow.from_client_secrets_file(self.CLIENT_SECRETS_FILE, 
+                                   self.SCOPES)
 
-            storage = Storage("%s-oauth2.json" % sys.argv[0])
-            credentials = storage.get()
-
-            if credentials is None or credentials.invalid:
-                flags = argparser.parse_args()
-                credentials = run_flow(flow, storage, flags)
+            credentials = flow.run_console()
 
             return build(self.YOUTUBE_API_SERVICE_NAME, self.YOUTUBE_API_VERSION,
-                 http=credentials.authorize(httplib2.Http()))
+                 credentials = credentials)
 
         """
 The CLIENT_SECRETS_FILE variable specifies the name of a file that contains
 the OAuth 2.0 information for this application, including its client_id and
-client_secret. You can acquire an OAuth 2.0 client ID and client secret from
-the Google Developers Console at
-https://console.developers.google.com/.
-Please ensure that you have enabled the YouTube Data API for your project.
-For more information about using OAuth2 to access the YouTube Data API, see:
-  https://developers.google.com/youtube/v3/guides/authentication
-For more information about the client_secrets.json file format, see:
-  https://developers.google.com/api-client-library/python/guide/aaa_client_secrets
+client_secret.
         """
 
         self.CLIENT_SECRETS_FILE = "client_secrets.json"
 
-        # This variable defines a message to display if the CLIENT_SECRETS_FILE is
-        # missing.
-        self.MISSING_CLIENT_SECRETS_MESSAGE = """
-WARNING: Please configure OAuth 2.0
-To make this sample run you will need to populate the client_secrets.json file
-found at:
-   %s
-with information from the Developers Console
-https://console.developers.google.com/
-For more information about the client_secrets.json file format, please visit:
-https://developers.google.com/api-client-library/python/guide/aaa_client_secrets
-""" % os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                   self.CLIENT_SECRETS_FILE))
-
         # This OAuth 2.0 access scope allows for full read/write access to the
-        # authenticated user's account.
-        self.YOUTUBE_READ_WRITE_SCOPE = "https://www.googleapis.com/auth/youtube"
+        # authenticated user's account and requires requests to use an SSL connection.
+        self.SCOPES = ['https://www.googleapis.com/auth/youtube.force-ssl']
         self.YOUTUBE_API_SERVICE_NAME = "youtube"
         self.YOUTUBE_API_VERSION = "v3"
         self.YOUTUBE_AUTHENTICATED_SERVICE = get_authenticated_service(self)
@@ -91,7 +63,7 @@ class Playlists:
             part="snippet,status",
             body=dict(
                 snippet=dict(
-                    title="Playlist %d v3" % val,
+                    title="Playlist %d v4" % val,
                     description="A music playlist created with the YouTube API v3"
                 ),
                 status=dict(
@@ -198,13 +170,17 @@ class VideoRetrieval:
         return youtube_id
 
 
-    def retrieve_video_length(self, youtube_id):
+    def retrieve_video_length(youtube_auth, youtube_id):
         """Call the API to retrieve duration info for specific video
         """
-        video_response = self.youtube_authentication.videos().list(
-            id=youtube_id,
-            part='contentDetails'
+        #print("YouTube ID:", youtube_id)
+
+        video_response = youtube_auth.videos().list(
+            part='contentDetails,snippet',
+            id=youtube_id
         ).execute()
+
+        #print("Video Response:", video_response)
 
         length = video_response.get("items", [])[0][
             "contentDetails"]["duration"]
@@ -272,8 +248,8 @@ class VideoRetrieval:
     def is_auto_channel(artist_variations, song_variations, title, description):
         """Check if video comes from auto-generated channel by YouTube
         """
-        if (name_fuzzy_match(artist_variations, description) and
-            name_fuzzy_match(song_variations, title) and
+        if (VideoRetrieval.name_fuzzy_match(artist_variations, description) and
+            VideoRetrieval.name_fuzzy_match(song_variations, title) and
                 "provided to youtube" in description):
             return True
         else:
@@ -282,25 +258,32 @@ class VideoRetrieval:
     def search_videos(self, maxResults, irrv_list):
         """Search for top relevant videos given keyword
         """
-        artist_variations = name_variations(self.artist)
-        song_variations = name_variations(self.song)
-        keyword = artist + ' ' + song
+        artist_variations = VideoRetrieval.name_variations(self.artist)
+        song_variations = VideoRetrieval.name_variations(self.song)
+        keyword = self.artist + ' ' + self.song
         response = VideoSearch(self.youtube_authentication, 
                                self.artist, self.song).youtube_search(maxResults)
         videos = []
 
+        #print("Video Responses:", response)
+
         for record in response:
-            if is_video(record):
-                title = retrieve_video_title(record)
-                user = retrieve_video_user(record)
-                description = retrieve_video_description(record)
-                youtube_id = retrieve_video_id(record)
-                length = retrieve_video_length(self.youtube_authentication, youtube_id)
-                user_search = official_channel_search(user)
-                length_search = parse_video_length(length)
-                artist_title_match = name_fuzzy_match(artist_variations, title)
-                song_title_match = name_fuzzy_match(song_variations, title)
-                if (not is_irrelevant(title, irrv_list) and
+            if VideoRetrieval.is_video(record):
+                title = VideoRetrieval.retrieve_video_title(record)
+                title = str(title, 'utf-8')
+                user = VideoRetrieval.retrieve_video_user(record)
+                user = str(user, 'utf-8')
+                description = VideoRetrieval.retrieve_video_description(record)
+                description = str(description, 'utf-8')
+                youtube_id = VideoRetrieval.retrieve_video_id(record)
+                youtube_id = str(youtube_id, 'utf-8')
+                length = VideoRetrieval.retrieve_video_length(self.youtube_authentication, youtube_id)
+                length = str(length, 'utf-8')
+                user_search = VideoRetrieval.official_channel_search(user)
+                length_search = VideoRetrieval.parse_video_length(length)
+                artist_title_match = VideoRetrieval.name_fuzzy_match(artist_variations, title)
+                song_title_match = VideoRetrieval.name_fuzzy_match(song_variations, title)
+                if (not VideoRetrieval.is_irrelevant(title, irrv_list) and
                         length_search is not None):
                     # If video does not contain terms irrelevant to search
                     hours, minutes, seconds = [length_search[0],
@@ -308,14 +291,14 @@ class VideoRetrieval:
                                                int(length_search[2])]
                     if minutes <= 20 and hours is None:
                         # If video is less than 20 minutes
-                        if is_auto_channel(artist_variations, song_variations,
+                        if VideoRetrieval.is_auto_channel(artist_variations, song_variations,
                                            title, description):
                             self.videos.append({
                                 'youtube_id': youtube_id,
                                 'title': title,
                                 'priority_flag': 1
                             })
-                        elif is_official_channel(user, user_search, artist_variations):
+                        elif VideoRetrieval.is_official_channel(user, user_search, artist_variations):
                             # If the song comes from an official channel by the
                             # band/label
                             if (artist_title_match and song_title_match):
@@ -361,11 +344,7 @@ def quota_estimate(TotalPlaylists, TotalSongs):
     return total_cost
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('filename', help = 'Filename of artists and songs',
-                        type=argparse.FileType('r'))
-    args = parser.parse_args()
-    NewSongs = pd.read_csv(args.filename)
+    NewSongs = pd.read_csv("SongsToAdd.csv", encoding = "ISO-8859-1")
     TotalSongs = len(NewSongs)
     MaxVideos = 200
     # Maximum number of videos per playlist
@@ -378,13 +357,13 @@ def main():
         Please proceed accordingly.""")
         sys.exit()
     print("""NOTE: Your estimated quota usage is %i units.""" % est)
-    #try:
-    youtube = YouTubeAuth().YOUTUBE_AUTHENTICATED_SERVICE
+    try:
+        youtube = YouTubeAuth().YOUTUBE_AUTHENTICATED_SERVICE
     except:
         print("Error in YouTube authentication.")
         sys.exit()
     song_counter = 0
-    irrv_list = create_irrv_token_list()
+    irrv_list = VideoRetrieval.create_irrv_token_list()
     for i in range(TotalPlaylists):
         playlist_obj = Playlists(youtube)
         playlists_insert_response = playlist_obj.create_playlist(i)
@@ -397,17 +376,17 @@ def main():
                 song = NewSongs.loc[j + song_counter, ["Song"]].values[0]
                 vid_retrieve_obj = VideoRetrieval(youtube, artist, song)
                 videos = vid_retrieve_obj.search_videos(maxResults=5, irrv_list=irrv_list)
-                top_vid = vid_retrieve_obj.retrieve_top_video(videos)
+                top_vid = VideoRetrieval.retrieve_top_video(videos)
                 if top_vid != "No results found":
                     playlist_obj.add_video_to_playlist(
                         top_vid['youtube_id'], playlist_id)
                     AddedSongs.append(
                         NewSongs.loc[j + song_counter, ["ID"]].values[0])
-            except HttpError, e:
+            except HttpError as e:
                 MissedSongs = NewSongs[~NewSongs["ID"].isin(AddedSongs)]
                 MissedSongs.to_csv(path_or_buf="MissedSongs_%d_%d.csv" %
-                                   (i, song_counter), index=False)
-                print "An HTTP error %d occurred:\n%s" % (e.resp.status, e.content)
+                                   (i, song_counter), index=False, encoding = "ISO-8859-1")
+                print("An HTTP error %d occurred:\n%s" % (e.resp.status, e.content))
         song_counter += MaxVideos
     MissedSongs = NewSongs[~NewSongs["ID"].isin(AddedSongs)]
     MissedSongs.to_csv(path_or_buf="MissedSongs_Final.csv", index=False)
